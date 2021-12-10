@@ -1,24 +1,10 @@
 #include "SnakeController.hpp"
 
-#include <algorithm>
-#include <sstream>
-
-#include "EventT.hpp"
-#include "IPort.hpp"
-
 namespace Snake
 {
-ConfigurationError::ConfigurationError()
-    : std::logic_error("Bad configuration of Snake::Controller.")
-{}
 
-UnexpectedEventException::UnexpectedEventException()
-    : std::runtime_error("Unexpected event received!")
-{}
-
-Controller::Controller(IPort& p_displayPort, IPort& p_foodPort, IPort& p_scorePort, std::string const& p_config)
+Controller::Controller(IPort& p_displayPort, IPort& p_scorePort, std::string const& p_config)
     : m_displayPort(p_displayPort),
-      m_foodPort(p_foodPort),
       m_scorePort(p_scorePort),
       m_paused(false)
 {
@@ -71,32 +57,6 @@ bool Controller::isSegmentAtPosition(int x, int y) const
 bool Controller::isPositionOutsideMap(int x, int y) const
 {
     return x < 0 or y < 0 or x >= m_mapDimension.first or y >= m_mapDimension.second;
-}
-
-void Controller::sendPlaceNewFood(int x, int y)
-{
-    if(isPositionOutsideMap(x, y)) {
-        return;
-    }
-
-    m_foodPosition = std::make_pair(x, y);
-
-    DisplayInd placeNewFood;
-    placeNewFood.x = x;
-    placeNewFood.y = y;
-    placeNewFood.value = Cell_FOOD;
-
-    m_displayPort.send(std::make_unique<EventT<DisplayInd>>(placeNewFood));
-}
-
-void Controller::sendClearOldFood()
-{
-    DisplayInd clearOldFood;
-    clearOldFood.x = m_foodPosition.first;
-    clearOldFood.y = m_foodPosition.second;
-    clearOldFood.value = Cell_FREE;
-
-    m_displayPort.send(std::make_unique<EventT<DisplayInd>>(clearOldFood));
 }
 
 namespace
@@ -191,37 +151,6 @@ void Controller::handleDirectionInd(std::unique_ptr<Event> e)
     if (perpendicular(m_currentDirection, direction)) {
         m_currentDirection = direction;
     }
-}
-
-void Controller::updateFoodPosition(int x, int y, std::function<void()> clearPolicy)
-{
-        if (isSegmentAtPosition(x, y)) {
-            m_foodPort.send(std::make_unique<EventT<FoodReq>>());
-            return;
-        }
-
-        if (isPositionOutsideMap(x, y)) {
-            m_foodPort.send(std::make_unique<EventT<FoodReq>>());
-            return;
-        }
-
-        clearPolicy();
-        sendPlaceNewFood(x, y);
-    
-}
-
-void Controller::handleFoodInd(std::unique_ptr<Event> e)
-{
-    auto receivedFood = payload<FoodInd>(*e);
-
-    updateFoodPosition(receivedFood.x, receivedFood.y, std::bind(&Controller::sendClearOldFood, this));
-}
-
-void Controller::handleFoodResp(std::unique_ptr<Event> e)
-{
-    auto requestedFood = payload<FoodResp>(*e);
-
-    updateFoodPosition(requestedFood.x, requestedFood.y, []{});
 }
 
 void Controller::handlePauseInd(std::unique_ptr<Event> e)
